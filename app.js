@@ -1,0 +1,998 @@
+﻿// ========== 星空相册 v12 - 最终修复版 ==========
+var canvas = document.getElementById("c");
+var ctx = canvas.getContext("2d");
+var overlay = document.getElementById("overlay");
+var modalCanvas = document.getElementById("modalCanvas");
+var modalCtx = modalCanvas.getContext("2d");
+var photoTitle = document.getElementById("photoTitle");
+var photoDesc = document.getElementById("photoDesc");
+var closeBtn = document.getElementById("closeBtn");
+var prevBtn = document.getElementById("prevBtn");
+var nextBtn = document.getElementById("nextBtn");
+var deleteBtn = document.getElementById("deleteBtn");
+var replaceBtn = document.getElementById("replaceBtn");
+var replaceInput = document.getElementById("replace-input");
+var uploadInput = document.getElementById("upload-input");
+var speedSlider = document.getElementById("speed-slider");
+var speedValEl = document.getElementById("speed-val");
+var starNumSlider = document.getElementById("star-num-slider");
+var starNumVal = document.getElementById("star-num-val");
+var btnAutoRotate = document.getElementById("btn-auto-rotate");
+var btnReset = document.getElementById("btn-reset");
+var zoomIndicator = document.getElementById("zoom-indicator");
+var starCountEl = document.getElementById("star-count");
+var searchInput = null;
+var searchFlyTo = null; // {starIdx, starId} or null
+var announceText = "";
+var announceTimer = 0;
+
+var W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+// ===== 本地渐变模板 =====
+var TEMPLATE_COLORS = [
+  {c1:"#667eea", c2:"#764ba2"},
+  {c1:"#f093fb", c2:"#f5576c"},
+  {c1:"#4facfe", c2:"#00f2fe"},
+  {c1:"#43e97b", c2:"#38f9d7"},
+  {c1:"#fa709a", c2:"#fee140"},
+  {c1:"#a18cd1", c2:"#fbc2eb"},
+  {c1:"#fccb90", c2:"#d57eeb"},
+  {c1:"#e0c3fc", c2:"#8ec5fc"},
+  {c1:"#f5576c", c2:"#ff6a88"},
+  {c1:"#667eea", c2:"#00f2fe"},
+  {c1:"#89f7fe", c2:"#66a6ff"},
+  {c1:"#fddb92", c2:"#d1fdff"},
+  {c1:"#c1dfc4", c2:"#deecdd"},
+  {c1:"#9796f0", c2:"#fbc7d4"},
+  {c1:"#fbc2eb", c2:"#a6c1ee"},
+  {c1:"#fdcbf1", c2:"#fdcbd1"},
+  {c1:"#a6c0fe", c2:"#f68084"},
+  {c1:"#fccb90", c2:"#d57eeb"},
+  {c1:"#e6dee9", c2:"#a6c1ee"},
+  {c1:"#84fab0", c2:"#8fd3f4"},
+  {c1:"#cfd9df", c2:"#e2ebf0"},
+  {c1:"#f6d365", c2:"#fda085"},
+  {c1:"#ffecd2", c2:"#fcb69f"},
+  {c1:"#a1c4fd", c2:"#c2e9fb"},
+  {c1:"#d4fc79", c2:"#96e6a1"},
+  {c1:"#84fab0", c2:"#a8e6cf"},
+  {c1:"#fbc2eb", c2:"#fcb69f"},
+  {c1:"#a8edea", c2:"#fed6e3"},
+  {c1:"#d299c2", c2:"#fef9d7"},
+  {c1:"#64b3f4", c2:"#32d2c3"},
+  {c1:"#ee9ca7", c2:"#ffdde1"},
+  {c1:"#2193b0", c2:"#6dd5ed"},
+];
+
+function createCircleThumb(colorPair, size) {
+  var c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  var cx = c.getContext("2d");
+  var half = size / 2;
+  var g = cx.createLinearGradient(0, 0, size, size);
+  g.addColorStop(0, colorPair.c1);
+  g.addColorStop(1, colorPair.c2);
+  cx.fillStyle = g;
+  cx.fillRect(0, 0, size, size);
+  cx.globalCompositeOperation = "destination-in";
+  cx.beginPath();
+  cx.arc(half, half, half, 0, Math.PI * 2);
+  cx.fill();
+  return c;
+}
+
+var circleThumbs = [];
+for (var ti = 0; ti < 32; ti++) {
+  circleThumbs.push(createCircleThumb(TEMPLATE_COLORS[ti % 32], 256));
+}
+
+// ===== 照片数据 =====
+var photos = [];
+var loadedImages = [];
+var photoStars = [];
+var currentPhotoIdx = -1;
+var STAR_CACHE = {};
+var STAR_CACHE_SIZE = 256;
+
+function getStarCache(idx) {
+  if (!STAR_CACHE[idx]) {
+    var c = document.createElement("canvas");
+    c.width = STAR_CACHE_SIZE;
+    c.height = STAR_CACHE_SIZE;
+    var cctx = c.getContext("2d");
+    var half = STAR_CACHE_SIZE / 2;
+    cctx.beginPath();
+    cctx.arc(half, half, half, 0, Math.PI * 2);
+    cctx.clip();
+    var realImg = loadedImages[idx];
+    if (realImg) {
+      var scale = Math.min(STAR_CACHE_SIZE / realImg.width, STAR_CACHE_SIZE / realImg.height);
+      var dw = realImg.width * scale;
+      var dh = realImg.height * scale;
+      cctx.drawImage(realImg, (STAR_CACHE_SIZE - dw) / 2, (STAR_CACHE_SIZE - dh) / 2, dw, dh);
+    } else {
+      cctx.drawImage(circleThumbs[idx % 32], 0, 0, STAR_CACHE_SIZE, STAR_CACHE_SIZE);
+    }
+    STAR_CACHE[idx] = c;
+  }
+  return STAR_CACHE[idx];
+}
+
+// ===== 初始化 =====
+function initPhotos() {
+  photos = [];
+  loadedImages = [];
+  photoStars = [];
+  STAR_CACHE = {};
+  for (var i = 0; i < 32; i++) {
+    photos.push({ title: "星星 " + (i + 1), desc: "", img: null });
+    loadedImages[i] = null;
+  }
+  buildPhotoStars(photos.length);
+  updateStarCount();
+}
+
+function buildPhotoStars(count) {
+  photoStars = [];
+  var numArms = 3;
+  var maxRadius = 400 + count * 8;
+  for (var i = 0; i < count; i++) {
+    var t = i / Math.max(count - 1, 1);
+    var angle = t * Math.PI * 8;
+    var radius = Math.pow(t, 0.6) * maxRadius;
+    var armIndex = i % numArms;
+    var armOffset = (armIndex / numArms) * Math.PI * 2;
+    var armSpread = (Math.random() - 0.5) * (0.5 + t * 1.5);
+    var x = Math.cos(angle + armOffset + armSpread) * radius;
+    var z = Math.sin(angle + armOffset + armSpread) * radius;
+    // Gaussian-like vertical spread: thicker at center, thinner at edges
+    var centerWeight = Math.exp(-t * 3);
+    var ySpread = 80 * (0.3 + centerWeight * 0.7);
+    var y = (Math.random() - 0.5) * ySpread;
+    var starId = "⭐-" + String(Math.floor(Math.random() * 900) + 100);
+    photoStars.push({
+      x: x,
+      y: y,
+      z: z,
+      photo: photos[i % photos.length],
+      baseSize: 25 + Math.random() * 25,
+      pulsePhase: Math.random() * Math.PI * 2,
+      idx: i,
+      starId: starId,
+    });
+  }
+}
+
+
+async function loadSavedImages() {
+  var promises = [];
+  for (var i = 0; i < photos.length; i++) {
+    promises.push((function(idx) {
+      return loadImageFromDB(idx).then(function(base64) {
+        if (base64) {
+          return new Promise(function(resolve) {
+            var img = new Image();
+            img.onload = function() {
+              loadedImages[idx] = img;
+              STAR_CACHE[idx] = null;
+              getStarCache(idx);
+              resolve();
+            };
+            img.onerror = function() { resolve(); };
+            img.src = base64;
+          });
+        }
+        return Promise.resolve();
+      });
+    })(i));
+  }
+  await Promise.all(promises);
+}
+
+// Load saved images from DB after init
+loadSavedImages();
+
+function updateStarCount() {
+  if (starCountEl) starCountEl.textContent = photoStars.length + " 颗星星";
+}
+
+// ===== 通用：处理图片文件 =====
+function handleImageFile(file, callback) {
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var base64Data = ev.target.result;
+    var img = new Image();
+    img.onload = function() {
+      callback(null, img);
+    };
+    img.onerror = function() {
+      callback("图片加载失败", null);
+    };
+    img.src = base64Data;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ===== 上传照片（全局） =====
+uploadInput.addEventListener("change", function(e) {
+  var files = e.target.files;
+  for (var i = 0; i < files.length; i++) {
+    (function(file) {
+      handleImageFile(file, function(err, img) {
+        var idx = photos.length;
+        photos.push({
+          title: "我的照片 " + (idx + 1),
+          desc: "自定义上传的照片",
+          img: err ? null : img,
+        });
+        if (err) {
+          loadedImages[idx] = null;
+        } else {
+          loadedImages[idx] = img;
+        }
+        buildPhotoStars(photos.length);
+        updateStarCount();
+        STAR_CACHE[idx] = null;
+        getStarCache(idx);
+        savePhotoData();
+      });
+    })(files[i]);
+  }
+  uploadInput.value = "";
+});
+
+// ===== 更换照片（弹窗内）=====
+replaceBtn.addEventListener("click", function(e) {
+  e.preventDefault();
+  replaceInput.click();
+});
+
+replaceInput.addEventListener("change", function(e) {
+  var file = e.target.files[0];
+  if (!file || currentPhotoIdx < 0) return;
+  var idx = currentPhotoIdx;
+  handleImageFile(file, function(err, img) {
+    if (err) {
+      console.warn("图片加载失败:", err);
+      loadedImages[idx] = null;
+    } else {
+      loadedImages[idx] = img;
+      photos[idx].img = img;
+    }
+    STAR_CACHE[idx] = null;
+    getStarCache(idx);
+    showPhoto(idx);
+    savePhotoData();
+  });
+  replaceInput.value = "";
+});
+
+// ===== 深空背景星星 =====
+var deepStars = [];
+for (var i = 0; i < 2000; i++) {
+  var theta = Math.random() * Math.PI * 2;
+  var phi = Math.acos(2 * Math.random() - 1);
+  var layer = Math.random();
+  var r;
+  if (layer < 0.3) r = 800 + Math.random() * 1200;
+  else if (layer < 0.7) r = 2000 + Math.random() * 3000;
+  else r = 5000 + Math.random() * 10000;
+  deepStars.push({
+    x: r * Math.sin(phi) * Math.cos(theta),
+    y: r * Math.sin(phi) * Math.sin(theta),
+    z: r * Math.cos(phi),
+    baseSize: layer < 0.3 ? (Math.random() * 2 + 1) : (layer < 0.7 ? (Math.random() * 1.2 + 0.3) : (Math.random() * 0.8 + 0.1)),
+    brightness: 0.3 + Math.random() * 0.7,
+    twinkleSpeed: Math.random() * 0.02 + 0.003,
+    twinkleOffset: Math.random() * Math.PI * 2,
+    color: Math.random() > 0.85 ? (Math.random() > 0.5 ? "180,200,255" : "255,200,180") : "255,255,255",
+  });
+}
+
+// ===== 流星 =====
+var shootingStars = [];
+function spawnShootingStar() {
+  if (Math.random() > 0.004) return;
+  shootingStars.push({
+    x: Math.random() * W,
+    y: Math.random() * H * 0.5,
+    angle: Math.PI / 4 + (Math.random() - 0.5) * 0.4,
+    length: 100 + Math.random() * 80,
+    speed: 5 + Math.random() * 4,
+    life: 0,
+    maxLife: 50 + Math.random() * 25,
+  });
+}
+
+// ===== 粒子 =====
+var particles = [];
+for (var i = 0; i < 15; i++) {
+  particles.push({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: (Math.random() - 0.5) * 0.2,
+    size: Math.random() * 1.5 + 0.3,
+    opacity: Math.random() * 0.2,
+  });
+}
+
+// ===== 3D =====
+var rotX = 0, rotY = 0;
+var targetRotX = 0, targetRotY = 0;
+var FOV = 1000;
+var zoomLevel = 1.0;
+var mouseOverStar = -1;
+var autoRotateOn = true;
+var rotationSpeed = 0.2;
+var targetRotationSpeed = 0.2;
+
+function rotatePoint(px, py, pz, rx, ry) {
+  var cosY = Math.cos(ry), sinY = Math.sin(ry);
+  var nx = px * cosY - pz * sinY;
+  var nz = px * sinY + pz * cosY;
+  var cosX = Math.cos(rx), sinX = Math.sin(rx);
+  var ny = py * cosX - nz * sinX;
+  var nz2 = py * sinX + nz * cosX;
+  return [nx, ny, nz2];
+}
+
+function project(px, py, pz) {
+  var scale = FOV * zoomLevel / (FOV + pz * zoomLevel);
+  return [px * scale + W / 2, py * scale + H / 2, scale];
+}
+
+// ===== 交互 =====
+var dragging = false, lastMX = 0, lastMY = 0;
+
+canvas.addEventListener("mousedown", function(e) {
+  dragging = true;
+  lastMX = e.clientX;
+  lastMY = e.clientY;
+});
+
+window.addEventListener("mousemove", function(e) {
+  if (!dragging) return;
+  var dx = e.clientX - lastMX;
+  var dy = e.clientY - lastMY;
+  targetRotY += dx * 0.004;
+  targetRotX += dy * 0.004;
+  targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
+  lastMX = e.clientX;
+  lastMY = e.clientY;
+});
+
+window.addEventListener("mouseup", function() { dragging = false; });
+
+canvas.addEventListener("touchstart", function(e) {
+  dragging = true;
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+}, {passive:true});
+
+canvas.addEventListener("touchmove", function(e) {
+  if (!dragging) return;
+  var dx = e.touches[0].clientX - lastMX;
+  var dy = e.touches[0].clientY - lastMY;
+  targetRotY += dx * 0.004;
+  targetRotX += dy * 0.004;
+  targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+}, {passive:true});
+
+canvas.addEventListener("touchend", function() { dragging = false; });
+
+canvas.addEventListener("wheel", function(e) {
+  e.preventDefault();
+  var delta = e.deltaY > 0 ? -0.1 : 0.1;
+  zoomLevel = Math.max(0.3, Math.min(5.0, zoomLevel + delta));
+  if (zoomIndicator) zoomIndicator.textContent = "缩放: " + zoomLevel.toFixed(1) + "x";
+}, {passive:false});
+
+canvas.addEventListener("mousemove", function(e) {
+  if (dragging) return;
+  var mx = e.clientX, my = e.clientY;
+  var found = -1;
+  for (var j = 0; j < photoStars.length; j++) {
+    var ps = photoStars[j];
+    var rp = rotatePoint(ps.x, ps.y, ps.z, rotX, rotY);
+    var pr = project(rp[0], rp[1], rp[2]);
+    if (pr[2] <= 0) continue;
+    var ddx = mx - pr[0], ddy = my - pr[1];
+    var dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    var hitR = ps.baseSize * pr[2] * 2.0;
+    if (dist < hitR) { found = j; break; }
+  }
+  mouseOverStar = found;
+  canvas.style.cursor = found >= 0 ? "pointer" : "grab";
+});
+
+canvas.addEventListener("click", function(e) {
+  if (Math.abs(e.clientX - lastMX) > 8 || Math.abs(e.clientY - lastMY) > 8) return;
+  var mx = e.clientX, my = e.clientY;
+  var closest = null, closestDist = Infinity;
+  for (var j = 0; j < photoStars.length; j++) {
+    var ps = photoStars[j];
+    var rp = rotatePoint(ps.x, ps.y, ps.z, rotX, rotY);
+    var pr = project(rp[0], rp[1], rp[2]);
+    if (pr[2] <= 0) continue;
+    var ddx = mx - pr[0], ddy = my - pr[1];
+    var dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    var hitR = ps.baseSize * pr[2] * 2.0;
+    if (dist < hitR && dist < closestDist) {
+      closest = ps;
+      closestDist = dist;
+    }
+  }
+  if (closest) {
+    var idx = photoStars.indexOf(closest);
+    showPhoto(idx);
+  }
+});
+
+// ===== 控制按钮 =====
+btnAutoRotate.addEventListener("click", function() {
+  autoRotateOn = !autoRotateOn;
+  btnAutoRotate.textContent = "旋转：" + (autoRotateOn ? "开" : "关");
+  btnAutoRotate.classList.toggle("active", autoRotateOn);
+});
+
+btnReset.addEventListener("click", function() {
+  targetRotX = 0;
+  targetRotY = 0;
+});
+
+speedSlider.addEventListener("input", function() {
+  targetRotationSpeed = this.value / 100;
+  speedValEl.textContent = targetRotationSpeed.toFixed(1) + "x";
+});
+
+starNumSlider.addEventListener("input", function() {
+  var num = parseInt(this.value);
+  starNumVal.textContent = num;
+  buildPhotoStars(num);
+  updateStarCount();
+});
+
+// ===== 搜索星星编号 =====
+searchInput = document.getElementById("search-input");
+if (searchInput) {
+  searchInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      var val = this.value.trim().toUpperCase();
+      if (!val) {
+        searchFlyTo = null;
+        return;
+      }
+      searchFlyTo = null;
+      for (var i = 0; i < photoStars.length; i++) {
+        var sid = photoStars[i].starId || "";
+        // Match against full starId OR just the number part
+        if (sid.toUpperCase().indexOf(val) !== -1 || sid.replace(/[⭐-]/g, "").indexOf(val) !== -1) {
+          searchFlyTo = { starIdx: i, starId: sid };
+          break;
+        }
+      }
+      if (searchFlyTo) {
+        // Trigger shooting star burst
+        for (var s = 0; s < 5; s++) {
+          shootingStars.push({
+            x: Math.random() * W,
+            y: Math.random() * H * 0.5,
+            angle: Math.PI / 4 + (Math.random() - 0.5) * 0.4,
+            length: 120 + Math.random() * 100,
+            speed: 6 + Math.random() * 5,
+            life: 0,
+            maxLife: 40 + Math.random() * 30,
+          });
+        }
+        announceText = "找到它了！编号 " + searchFlyTo.starId;
+        announceTimer = 200;
+        autoRotateOn = false;
+        var btn = document.getElementById("btn-auto-rotate");
+        if (btn) {
+          btn.textContent = "旋转：关";
+          btn.classList.remove("active");
+        }
+      } else {
+        announceText = "未找到编号含 " + val + " 的星星";
+        announceTimer = 150;
+      }
+      this.blur();
+    }
+
+// ===== IndexedDB for persistent storage =====
+var DB_NAME = "starryAlbum";
+var DB_VERSION = 1;
+var DB_STORE = "photos";
+var db = null;
+
+function openDB() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = function(e) {
+      var d = e.target.result;
+      if (!d.objectStoreNames.contains(DB_STORE)) {
+        d.createObjectStore(DB_STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = function(e) {
+      db = e.target.result;
+      resolve(db);
+    };
+    req.onerror = function(e) {
+      reject(e.target.error);
+    };
+  });
+}
+
+function dbPut(item) {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(item);
+    tx.oncomplete = function() { resolve(); };
+    tx.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+function dbGet(id) {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(DB_STORE, "readonly");
+    var req = tx.objectStore(DB_STORE).get(id);
+    req.onsuccess = function() { resolve(req.result || null); };
+    req.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+function dbDelete(id) {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).delete(id);
+    tx.oncomplete = function() { resolve(); };
+    tx.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+function dbClear() {
+  return new Promise(function(resolve, reject) {
+    var tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).clear();
+    tx.oncomplete = function() { resolve(); };
+    tx.onerror = function(e) { reject(e.target.error); };
+  });
+}
+
+// Load saved data on startup
+async function loadSavedData() {
+  try {
+    var data = await dbGet("album_data");
+    if (data && data.photos) {
+      // Restore photo titles and descriptions
+      for (var i = 0; i < data.photos.length && i < photos.length; i++) {
+        photos[i].title = data.photos[i].title || photos[i].title;
+        photos[i].desc = data.photos[i].desc || photos[i].desc;
+      }
+    }
+    if (data && data.count) {
+      // Restore star count
+      starNumSlider.value = data.count;
+      starNumVal.textContent = data.count;
+      targetRotationSpeed = data.count / 100;
+    }
+  } catch(e) {
+    console.warn("Failed to load saved data:", e);
+  }
+}
+
+// Save photo data (titles, descriptions, count)
+function savePhotoData() {
+  var saveData = {
+    id: "album_data",
+    photos: [],
+    count: photoStars.length
+  };
+  for (var i = 0; i < photos.length; i++) {
+    saveData.photos.push({
+      title: photos[i].title,
+      desc: photos[i].desc
+    });
+  }
+  dbPut(saveData).catch(function(e) { console.warn("Save failed:", e); });
+}
+
+// Save image to IndexedDB as base64
+async function saveImageToDB(idx, base64Data) {
+  try {
+    await dbPut({ id: "img_" + idx, data: base64Data });
+  } catch(e) {
+    console.warn("Image save failed:", e);
+  }
+}
+
+// Load image from IndexedDB
+async function loadImageFromDB(idx) {
+  try {
+    var item = await dbGet("img_" + idx);
+    return item ? item.data : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+// Delete image from IndexedDB
+async function deleteImageFromDB(idx) {
+  try {
+    await dbDelete("img_" + idx);
+  } catch(e) {
+    console.warn("Image delete failed:", e);
+  }
+}
+
+// Clear all DB data
+function clearAllData() {
+  if (db) {
+    dbClose();
+    var req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = function() { location.reload(); };
+  }
+}
+
+function dbClose() {
+  if (db) { db.close(); db = null; }
+}
+
+// Initialize DB and load data
+openDB().then(function() {
+  loadSavedData();
+}).catch(function(e) {
+  console.warn("IndexedDB not available:", e);
+});
+
+
+  });
+}
+
+// ===== 弹窗 =====
+function showPhoto(idx) {
+  currentPhotoIdx = idx;
+  var ps = photoStars[idx];
+  var photo = ps.photo;
+
+  var mw = modalCanvas.width;
+  var mh = modalCanvas.height;
+  modalCtx.clearRect(0, 0, mw, mh);
+  modalCtx.save();
+  modalCtx.beginPath();
+  modalCtx.rect(0, 0, mw, mh);
+  modalCtx.clip();
+  if (loadedImages[idx]) {
+    var scale = Math.min(mw / loadedImages[idx].width, mh / loadedImages[idx].height);
+    var dw = loadedImages[idx].width * scale;
+    var dh = loadedImages[idx].height * scale;
+    modalCtx.drawImage(loadedImages[idx], (mw - dw) / 2, (mh - dh) / 2, dw, dh);
+  }
+  modalCtx.restore();
+
+  if (photo.title) photoTitle.textContent = photo.title;
+  if (photo.desc) photoDesc.textContent = photo.desc;
+
+  overlay.classList.add("show");
+  var sb = document.querySelector(".search-box");
+  if (sb) sb.classList.add("search-hidden");
+}
+
+function hidePhoto() {
+  overlay.classList.remove("show");
+  syncEdit();
+  currentPhotoIdx = -1;
+  var sb = document.querySelector(".search-box");
+  if (sb) sb.classList.remove("search-hidden");
+}
+
+function syncEdit() {
+  if (currentPhotoIdx >= 0 && currentPhotoIdx < photoStars.length) {
+    photoStars[currentPhotoIdx].photo.title = photoTitle.textContent;
+    photoStars[currentPhotoIdx].photo.desc = photoDesc.textContent;
+  }
+}
+
+closeBtn.addEventListener("click", hidePhoto);
+
+// Reset search on Escape
+window.addEventListener("keydown", function(e) {
+  if (e.key === "Escape" && searchFlyTo && searchFlyTo.reached) {
+    searchFlyTo = null;
+    autoRotateOn = true;
+    var btn = document.getElementById("btn-auto-rotate");
+    if (btn) {
+      btn.textContent = "旋转：开";
+      btn.classList.add("active");
+    }
+    targetRotX = 0;
+    targetRotY = 0;
+  }
+});
+overlay.addEventListener("click", function(e) {
+  if (e.target === overlay) hidePhoto();
+});
+
+prevBtn.addEventListener("click", function(e) {
+  e.stopPropagation();
+  syncEdit();
+  currentPhotoIdx = (currentPhotoIdx - 1 + photoStars.length) % photoStars.length;
+  showPhoto(currentPhotoIdx);
+});
+
+nextBtn.addEventListener("click", function(e) {
+  e.stopPropagation();
+  syncEdit();
+  currentPhotoIdx = (currentPhotoIdx + 1) % photoStars.length;
+  showPhoto(currentPhotoIdx);
+});
+
+// ===== 删除星星 =====
+deleteBtn.addEventListener("click", function(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  if (currentPhotoIdx < 0 || currentPhotoIdx >= photoStars.length) return;
+  photoStars.splice(currentPhotoIdx, 1);
+  updateStarCount();
+  hidePhoto();
+});
+
+window.addEventListener("keydown", function(e) {
+  if (!overlay.classList.contains("show")) return;
+  if (e.key === "Escape") hidePhoto();
+  if (e.key === "ArrowLeft") {
+    syncEdit();
+    currentPhotoIdx = (currentPhotoIdx - 1 + photoStars.length) % photoStars.length;
+    showPhoto(currentPhotoIdx);
+  }
+  if (e.key === "ArrowRight") {
+    syncEdit();
+    currentPhotoIdx = (currentPhotoIdx + 1) % photoStars.length;
+    showPhoto(currentPhotoIdx);
+  }
+});
+
+// ===== 绘制 =====
+function drawDeepStars() {
+  var t = Date.now();
+  for (var i = 0; i < deepStars.length; i++) {
+    var s = deepStars[i];
+    var rp = rotatePoint(s.x, s.y, s.z, rotX, rotY);
+    var pr = project(rp[0], rp[1], rp[2]);
+    if (pr[2] <= 0) continue;
+    var twinkle = s.brightness * (0.5 + 0.5 * Math.sin(t * s.twinkleSpeed + s.twinkleOffset));
+    var sz = s.baseSize * pr[2];
+    ctx.beginPath();
+    ctx.arc(pr[0], pr[1], Math.max(sz, 0.3), 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(" + s.color + "," + twinkle + ")";
+    ctx.fill();
+    if (sz > 1.5) {
+      var g = ctx.createRadialGradient(pr[0], pr[1], 0, pr[0], pr[1], sz * 4);
+      g.addColorStop(0, "rgba(" + s.color + "," + twinkle * 0.1 + ")");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.beginPath();
+      ctx.arc(pr[0], pr[1], sz * 4, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+  }
+}
+
+function drawPhotoStars() {
+  var t = Date.now();
+  var sorted = [];
+  for (var i = 0; i < photoStars.length; i++) {
+    var ps = photoStars[i];
+    var rp = rotatePoint(ps.x, ps.y, ps.z, rotX, rotY);
+    var pr = project(rp[0], rp[1], rp[2]);
+    if (pr[2] <= 0) continue;
+    sorted.push({ps: ps, rp: rp, pr: pr, idx: i});
+  }
+  sorted.sort(function(a, b) { return b.rp[2] - a.rp[2]; });
+
+  for (var i = 0; i < sorted.length; i++) {
+    var ps = sorted[i].ps;
+    var pr = sorted[i].pr;
+    var sz = ps.baseSize * pr[2];
+    var idx = sorted[i].idx;
+    var pulse = 0.7 + 0.3 * Math.sin(t * 0.002 + ps.pulsePhase);
+
+    if (idx === mouseOverStar) {
+      pulse = 1;
+      sz *= 1.15;
+    }
+
+    // Outer glow
+    var g = ctx.createRadialGradient(pr[0], pr[1], 0, pr[0], pr[1], sz * 3);
+    g.addColorStop(0, "rgba(140,120,255," + 0.35 * pulse + ")");
+    g.addColorStop(0.5, "rgba(100,100,255," + 0.15 * pulse + ")");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.beginPath();
+    ctx.arc(pr[0], pr[1], sz * 3, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // Draw photo thumbnail as circle
+    var cached = getStarCache(idx);
+    if (cached) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(pr[0], pr[1], sz * 1.2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(cached, pr[0] - sz * 1.2, pr[1] - sz * 1.2, sz * 2.4, sz * 2.4);
+      ctx.restore();
+    }
+
+    if (idx === mouseOverStar) {
+      // Glow ring
+      ctx.beginPath();
+      ctx.arc(pr[0], pr[1], sz * 1.5, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(167,139,250,0.8)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Star ID label
+      ctx.font = "bold " + Math.max(10, sz * 0.6) + "px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(167,139,250,0.95)";
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = 4;
+      ctx.fillText(ps.starId, pr[0], pr[1] - sz * 1.8);
+      ctx.shadowBlur = 0;
+    }
+
+    // Pulsing ring around searched-found star
+    if (searchFlyTo && searchFlyTo.reached && idx === searchFlyTo.starIdx) {
+      var ringPulse = 0.5 + 0.5 * Math.sin(t * 0.005);
+      var ringR = sz * (2.0 + ringPulse * 0.5);
+      ctx.beginPath();
+      ctx.arc(pr[0], pr[1], ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,200,100," + (0.6 + ringPulse * 0.4) + ")";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // Second ring
+      ctx.beginPath();
+      ctx.arc(pr[0], pr[1], ringR * 1.3, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,200,100," + (0.2 + ringPulse * 0.2) + ")";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Label
+      ctx.font = "bold " + Math.max(12, sz * 0.8) + "px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255,220,100,0.95)";
+      ctx.shadowColor = "rgba(255,200,50,0.8)";
+      ctx.shadowBlur = 8;
+      ctx.fillText(ps.starId, pr[0], pr[1] - ringR - 8);
+      ctx.shadowBlur = 0;
+    }
+  }
+}
+
+function drawShootingStars() {
+  shootingStars = shootingStars.filter(function(ss) {
+    ss.x += Math.cos(ss.angle) * ss.speed;
+    ss.y += Math.sin(ss.angle) * ss.speed;
+    ss.life++;
+    var alpha = 1 - ss.life / ss.maxLife;
+    if (alpha <= 0) return false;
+    var ex = ss.x - Math.cos(ss.angle) * ss.length;
+    var ey = ss.y - Math.sin(ss.angle) * ss.length;
+    var g = ctx.createLinearGradient(ss.x, ss.y, ex, ey);
+    g.addColorStop(0, "rgba(255,255,255," + alpha + ")");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.beginPath();
+    ctx.moveTo(ss.x, ss.y);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    return true;
+  });
+}
+
+function drawParticles() {
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < 0) p.x = W;
+    if (p.x > W) p.x = 0;
+    if (p.y < 0) p.y = H;
+    if (p.y > H) p.y = 0;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(200,200,255," + p.opacity + ")";
+    ctx.fill();
+  }
+}
+
+function animate() {
+  var bg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8);
+  bg.addColorStop(0, "#060a1a");
+  bg.addColorStop(0.5, "#030510");
+  bg.addColorStop(1, "#010205");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  var ng = ctx.createRadialGradient(W * 0.25, H * 0.35, 0, W * 0.25, H * 0.35, W * 0.45);
+  ng.addColorStop(0, "rgba(25,8,55,0.35)");
+  ng.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = ng;
+  ctx.fillRect(0, 0, W, H);
+
+  var ng2 = ctx.createRadialGradient(W * 0.75, H * 0.65, 0, W * 0.75, H * 0.65, W * 0.4);
+  ng2.addColorStop(0, "rgba(8,18,55,0.3)");
+  ng2.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = ng2;
+  ctx.fillRect(0, 0, W, H);
+
+  var ng3 = ctx.createRadialGradient(W * 0.5, H * 0.8, 0, W * 0.5, H * 0.8, W * 0.35);
+  ng3.addColorStop(0, "rgba(40,8,30,0.2)");
+  ng3.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = ng3;
+  ctx.fillRect(0, 0, W, H);
+
+  rotX += (targetRotX - rotX) * 0.06;
+  rotY += (targetRotY - rotY) * 0.06;
+
+  rotationSpeed += (targetRotationSpeed - rotationSpeed) * 0.1;
+  // Pause on hover
+  var hoveredPhoto = mouseOverStar >= 0 && mouseOverStar < photoStars.length;
+  if (autoRotateOn && !dragging && !hoveredPhoto) {
+    targetRotY += 0.0015 * rotationSpeed * 10;
+  }
+
+  // Search fly-to: smoothly rotate to target star at ~45 degree俯视
+  if (searchFlyTo && searchFlyTo.starIdx >= 0 && searchFlyTo.starIdx < photoStars.length) {
+    var ps = photoStars[searchFlyTo.starIdx];
+    var idealRotY = -Math.atan2(ps.x, ps.z);
+    // 45 degree俯视: tilt X by -0.78 (PI/4) to see from above at angle
+    var idealRotX = -1.3;
+    var dy = idealRotY - targetRotY;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    targetRotY += dy * 0.04;
+    var dx = idealRotX - targetRotX;
+    targetRotX += dx * 0.04;
+    targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
+    if (Math.abs(dy) < 0.003 && Math.abs(dx) < 0.003) {
+      targetRotY = idealRotY;
+      targetRotX = idealRotX;
+      // Mark as reached so we can add a ring
+      searchFlyTo.reached = true;
+    }
+  }
+
+  drawParticles();
+  drawDeepStars();
+  drawPhotoStars();
+  spawnShootingStar();
+  drawShootingStars();
+
+  // Draw announcement text
+  if (announceTimer > 0) {
+    announceTimer--;
+    var alpha = Math.min(1, announceTimer / 30);
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(167,139,250," + alpha + ")";
+    ctx.shadowColor = "rgba(167,139,250," + (alpha * 0.5) + ")";
+    ctx.shadowBlur = 15;
+    ctx.fillText(announceText, W / 2, H * 0.12);
+    ctx.shadowBlur = 0;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
