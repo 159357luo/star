@@ -1,4 +1,4 @@
-﻿// ========== 星空相册 v12 - 最终修复版 ==========
+﻿// ==========  v12 -  ==========
 var canvas = document.getElementById("c");
 var ctx = canvas.getContext("2d");
 var overlay = document.getElementById("overlay");
@@ -34,7 +34,7 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-// ===== 本地渐变模板 =====
+// =====  =====
 var TEMPLATE_COLORS = [
   {c1:"#667eea", c2:"#764ba2"},
   {c1:"#f093fb", c2:"#f5576c"},
@@ -93,7 +93,7 @@ for (var ti = 0; ti < 32; ti++) {
   circleThumbs.push(createCircleThumb(TEMPLATE_COLORS[ti % 32], 256));
 }
 
-// ===== 照片数据 =====
+// =====  =====
 var photos = [];
 var loadedImages = [];
 var photoStars = [];
@@ -125,14 +125,14 @@ function getStarCache(idx) {
   return STAR_CACHE[idx];
 }
 
-// ===== 初始化 =====
+// =====  =====
 function initPhotos() {
   photos = [];
   loadedImages = [];
   photoStars = [];
   STAR_CACHE = {};
   for (var i = 0; i < 32; i++) {
-    photos.push({ title: "星星 " + (i + 1), desc: "", img: null });
+    photos.push({ title: "\u661F\u661F " + (i + 1), desc: "", img: null });
     loadedImages[i] = null;
   }
   buildPhotoStars(photos.length);
@@ -200,10 +200,10 @@ async function loadSavedImages() {
 loadSavedImages();
 
 function updateStarCount() {
-  if (starCountEl) starCountEl.textContent = photoStars.length + " 颗星星";
+  if (starCountEl) starCountEl.textContent = photoStars.length + " \u9897\u661F\u661F";
 }
 
-// ===== 通用：处理图片文件 =====
+// ===== ： =====
 function handleImageFile(file, callback) {
   var reader = new FileReader();
   reader.onload = function(ev) {
@@ -213,14 +213,14 @@ function handleImageFile(file, callback) {
       callback(null, img);
     };
     img.onerror = function() {
-      callback("图片加载失败", null);
+      callback("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25", null);
     };
     img.src = base64Data;
   };
   reader.readAsDataURL(file);
 }
 
-// ===== 上传照片（全局） =====
+// ===== （） =====
 uploadInput.addEventListener("change", function(e) {
   var files = e.target.files;
   for (var i = 0; i < files.length; i++) {
@@ -228,8 +228,8 @@ uploadInput.addEventListener("change", function(e) {
       handleImageFile(file, function(err, img) {
         var idx = photos.length;
         photos.push({
-          title: "我的照片 " + (idx + 1),
-          desc: "自定义上传的照片",
+          title: "\u6211\u7684\u7167\u7247 " + (idx + 1),
+          desc: "\u81EA\u5B9A\u4E49\u4E0A\u4F20\u7684\u7167\u7247",
           img: err ? null : img,
         });
         if (err) {
@@ -248,7 +248,7 @@ uploadInput.addEventListener("change", function(e) {
   uploadInput.value = "";
 });
 
-// ===== 更换照片（弹窗内）=====
+// ===== （）=====
 replaceBtn.addEventListener("click", function(e) {
   e.preventDefault();
   replaceInput.click();
@@ -260,7 +260,7 @@ replaceInput.addEventListener("change", function(e) {
   var idx = currentPhotoIdx;
   handleImageFile(file, function(err, img) {
     if (err) {
-      console.warn("图片加载失败:", err);
+      console.warn("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25:", err);
       loadedImages[idx] = null;
     } else {
       loadedImages[idx] = img;
@@ -274,7 +274,7 @@ replaceInput.addEventListener("change", function(e) {
   replaceInput.value = "";
 });
 
-// ===== 深空背景星星 =====
+// =====  =====
 var deepStars = [];
 for (var i = 0; i < 2000; i++) {
   var theta = Math.random() * Math.PI * 2;
@@ -296,7 +296,7 @@ for (var i = 0; i < 2000; i++) {
   });
 }
 
-// ===== 流星 =====
+// =====  =====
 var shootingStars = [];
 function spawnShootingStar() {
   if (Math.random() > 0.004) return;
@@ -311,7 +311,7 @@ function spawnShootingStar() {
   });
 }
 
-// ===== 粒子 =====
+// =====  =====
 var particles = [];
 for (var i = 0; i < 15; i++) {
   particles.push({
@@ -349,7 +349,7 @@ function project(px, py, pz) {
   return [px * scale + W / 2, py * scale + H / 2, scale];
 }
 
-// ===== 交互 =====
+// =====  =====
 var dragging = false, lastMX = 0, lastMY = 0;
 
 canvas.addEventListener("mousedown", function(e) {
@@ -394,7 +394,7 @@ canvas.addEventListener("wheel", function(e) {
   e.preventDefault();
   var delta = e.deltaY > 0 ? -0.1 : 0.1;
   zoomLevel = Math.max(0.3, Math.min(5.0, zoomLevel + delta));
-  if (zoomIndicator) zoomIndicator.textContent = "缩放: " + zoomLevel.toFixed(1) + "x";
+  if (zoomIndicator) zoomIndicator.textContent = "\u7F29\u653E: " + zoomLevel.toFixed(1) + "x";
 }, {passive:false});
 
 canvas.addEventListener("mousemove", function(e) {
@@ -438,10 +438,10 @@ canvas.addEventListener("click", function(e) {
   }
 });
 
-// ===== 控制按钮 =====
+// =====  =====
 btnAutoRotate.addEventListener("click", function() {
   autoRotateOn = !autoRotateOn;
-  btnAutoRotate.textContent = "旋转：" + (autoRotateOn ? "开" : "关");
+  btnAutoRotate.textContent = "\u65CB\u8F6C：" + (autoRotateOn ? "\u5F00" : "\u5173");
   btnAutoRotate.classList.toggle("active", autoRotateOn);
 });
 
@@ -462,7 +462,7 @@ starNumSlider.addEventListener("input", function() {
   updateStarCount();
 });
 
-// ===== 搜索星星编号 =====
+// =====  =====
 searchInput = document.getElementById("search-input");
 if (searchInput) {
   searchInput.addEventListener("keydown", function(e) {
@@ -494,16 +494,16 @@ if (searchInput) {
             maxLife: 40 + Math.random() * 30,
           });
         }
-        announceText = "找到它了！编号 " + searchFlyTo.starId;
+        announceText = "\u627E\u5230\u5B83\u4E86！\u7F16\u53F7 " + searchFlyTo.starId;
         announceTimer = 200;
         autoRotateOn = false;
         var btn = document.getElementById("btn-auto-rotate");
         if (btn) {
-          btn.textContent = "旋转：关";
+          btn.textContent = "\u65CB\u8F6C：\u5173";
           btn.classList.remove("active");
         }
       } else {
-        announceText = "未找到编号含 " + val + " 的星星";
+        announceText = "\u672A\u627E\u5230\u7F16\u53F7\u542B " + val + " \u7684\u661F\u661F";
         announceTimer = 150;
       }
       this.blur();
@@ -660,7 +660,7 @@ openDB().then(function() {
   });
 }
 
-// ===== 弹窗 =====
+// =====  =====
 function showPhoto(idx) {
   currentPhotoIdx = idx;
   var ps = photoStars[idx];
@@ -713,7 +713,7 @@ window.addEventListener("keydown", function(e) {
     autoRotateOn = true;
     var btn = document.getElementById("btn-auto-rotate");
     if (btn) {
-      btn.textContent = "旋转：开";
+      btn.textContent = "\u65CB\u8F6C：\u5F00";
       btn.classList.add("active");
     }
     targetRotX = 0;
@@ -738,7 +738,7 @@ nextBtn.addEventListener("click", function(e) {
   showPhoto(currentPhotoIdx);
 });
 
-// ===== 删除星星 =====
+// =====  =====
 deleteBtn.addEventListener("click", function(e) {
   e.stopPropagation();
   e.preventDefault();
@@ -763,7 +763,7 @@ window.addEventListener("keydown", function(e) {
   }
 });
 
-// ===== 绘制 =====
+// =====  =====
 function drawDeepStars() {
   var t = Date.now();
   for (var i = 0; i < deepStars.length; i++) {
@@ -952,11 +952,11 @@ function animate() {
     targetRotY += 0.0015 * rotationSpeed * 10;
   }
 
-  // Search fly-to: smoothly rotate to target star at ~45 degree俯视
+  // Search fly-to: smoothly rotate to target star at ~45 degree
   if (searchFlyTo && searchFlyTo.starIdx >= 0 && searchFlyTo.starIdx < photoStars.length) {
     var ps = photoStars[searchFlyTo.starIdx];
     var idealRotY = -Math.atan2(ps.x, ps.z);
-    // 45 degree俯视: tilt X by -0.78 (PI/4) to see from above at angle
+    // 45 degree: tilt X by -0.78 (PI/4) to see from above at angle
     var idealRotX = -1.3;
     var dy = idealRotY - targetRotY;
     while (dy > Math.PI) dy -= Math.PI * 2;
