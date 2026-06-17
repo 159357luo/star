@@ -1,0 +1,3 @@
+﻿AddType text/javascript .js
+AddCharset UTF-8 .js
+AddCharset UTF-8 .html
