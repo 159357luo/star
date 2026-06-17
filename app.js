@@ -162,7 +162,7 @@ function buildPhotoStars(count) {
       y: y,
       z: z,
       photo: photos[i % photos.length],
-      baseSize: 25 + Math.random() * 25,
+      baseSize: 12 + Math.random() * 12,
       pulsePhase: Math.random() * Math.PI * 2,
       idx: i,
       starId: starId,
@@ -408,7 +408,7 @@ canvas.addEventListener("mousemove", function(e) {
     if (pr[2] <= 0) continue;
     var ddx = mx - pr[0], ddy = my - pr[1];
     var dist = Math.sqrt(ddx * ddx + ddy * ddy);
-    var hitR = ps.baseSize * pr[2] * 2.0;
+    var hitR = Math.max(ps.baseSize * 0.5, 15);
     if (dist < hitR) { found = j; break; }
   }
   mouseOverStar = found;
@@ -426,9 +426,9 @@ canvas.addEventListener("click", function(e) {
     if (pr[2] <= 0) continue;
     var ddx = mx - pr[0], ddy = my - pr[1];
     var dist = Math.sqrt(ddx * ddx + ddy * ddy);
-    var hitR = ps.baseSize * pr[2] * 2.0;
+    var hitR = Math.max(ps.baseSize * 0.5, 15);
     if (dist < hitR && dist < closestDist) {
-      closest = ps;
+    if (dist < hitR && dist < closestDist) {
       closestDist = dist;
     }
   }
@@ -772,7 +772,7 @@ function drawDeepStars() {
     var pr = project(rp[0], rp[1], rp[2]);
     if (pr[2] <= 0) continue;
     var twinkle = s.brightness * (0.5 + 0.5 * Math.sin(t * s.twinkleSpeed + s.twinkleOffset));
-    var sz = s.baseSize * pr[2];
+    var sz = Math.min(s.baseSize * pr[2], 60);
     ctx.beginPath();
     ctx.arc(pr[0], pr[1], Math.max(sz, 0.3), 0, Math.PI * 2);
     ctx.fillStyle = "rgba(" + s.color + "," + twinkle + ")";
@@ -804,7 +804,7 @@ function drawPhotoStars() {
   for (var i = 0; i < sorted.length; i++) {
     var ps = sorted[i].ps;
     var pr = sorted[i].pr;
-    var sz = ps.baseSize * pr[2];
+    var sz = Math.min(ps.baseSize * pr[2], 60);
     var idx = sorted[i].idx;
     var pulse = 0.7 + 0.3 * Math.sin(t * 0.002 + ps.pulsePhase);
 
