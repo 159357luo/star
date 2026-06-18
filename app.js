@@ -612,6 +612,8 @@ function dbClose() {
 openDB().then(function() {
   return loadSavedData().then(function(hasSavedData) {
     if (!hasSavedData) initPhotos();
+    // Safety: ensure rotation speed matches slider after data restore
+    targetRotationSpeed = parseInt(speedSlider.value) / 100;
     return loadSavedImages();
   });
 }).catch(function(e) {
@@ -953,6 +955,8 @@ function animate() {
   rotX += (targetRotX - rotX) * 0.06;
   rotY += (targetRotY - rotY) * 0.06;
 
+  // Safety: clamp targetRotationSpeed to slider range (0.0-1.0)
+  if (targetRotationSpeed > 1.0) targetRotationSpeed = parseInt(speedSlider.value) / 100;
   rotationSpeed += (targetRotationSpeed - rotationSpeed) * 0.1;
   // Pause on hover
   var hoveredPhoto = mouseOverStar >= 0 && mouseOverStar < photoStars.length;
