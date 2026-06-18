@@ -545,7 +545,7 @@ canvas.addEventListener("mousemove", function(e) {
     if (dist < hitR) { found = j; break; }
   }
   mouseOverStar = found;
-  canvas.style.cursor = found >= 0 ? "pointer" : "grab";
+  canvas.style.cursor = found >= 0 ? "pointer" : "default";
 });
 
 canvas.addEventListener("click", function(e) {
