@@ -57,6 +57,15 @@ canvas:active{cursor:grabbing}
 .search-input::placeholder{color:rgba(255,255,255,.3)}
 .search-input:focus{border-color:#a78bfa;color:#fff;width:200px}
 .search-hidden{display:none!important}
+/* ===== 竖屏→横屏引导（手机专用） ===== */
+#rotate-hint{display:none;position:fixed;inset:0;background:radial-gradient(ellipse at center,#0a0a20 0%,#000 100%);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:24px;text-align:center}
+#rotate-hint .phone-icon{width:80px;height:130px;border:4px solid rgba(167,139,250,.6);border-radius:14px;position:relative;animation:phoneRotate 2s ease-in-out infinite}
+#rotate-hint .phone-icon::after{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);width:35px;height:6px;background:rgba(167,139,250,.4);border-radius:3px}
+#rotate-hint .phone-screen{position:absolute;top:22px;left:8px;right:8px;bottom:8px;background:linear-gradient(135deg,rgba(30,20,80,.8),rgba(10,5,40,.9));border-radius:4px;display:flex;align-items:center;justify-content:center}
+#rotate-hint .phone-screen span{font-size:28px;opacity:.7}
+@keyframes phoneRotate{0%,100%{transform:rotate(0deg)}45%{transform:rotate(0deg)}55%{transform:rotate(90deg)}90%{transform:rotate(90deg)}}
+#rotate-hint p{color:rgba(255,255,255,.7);font-size:18px;font-weight:500;letter-spacing:1px;margin:0}
+#rotate-hint p.sub{font-size:13px;color:rgba(255,255,255,.35);letter-spacing:0}
 /* ===== 移动端横屏适配 ===== */
 @media (max-width:1024px) and (max-height:600px),(max-width:900px){
   .hint{font-size:10px;bottom:8px;max-width:85vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -111,8 +120,9 @@ canvas:active{cursor:grabbing}
   .modal-nav button{padding:5px 12px;font-size:11px}
   .btn-delete{padding:5px 10px;font-size:10px}
 }
-/* ===== 竖屏手机适配 ===== */
+/* ===== 竖屏手机适配（优先提示横屏） ===== */
 @media (max-width:500px) and (orientation:portrait){
+  #rotate-hint{display:flex}
   #controls{top:6px;left:6px;gap:4px;flex-direction:row;flex-wrap:wrap}
   .ctrl-section{padding:4px 8px;gap:4px;border-radius:12px}
   .ctrl-toggle{padding:5px 10px;font-size:10px;border-radius:12px}
@@ -157,6 +167,11 @@ canvas:active{cursor:grabbing}
 </style>
 </head>
 <body>
+<div id="rotate-hint">
+  <div class="phone-icon"><div class="phone-screen"><span>⭐</span></div></div>
+  <p>请旋转手机</p>
+  <p class="sub">横屏浏览体验更佳</p>
+</div>
 <canvas id="c"></canvas>
 <div class="hint" id="hint">拖动旋转 | 点击星星 | 双击强化照片 | 点击标题直接修改 | 右上角按钮</div>
 <div id="zoom-indicator">缩放: 1.0x</div>
@@ -197,6 +212,6 @@ canvas:active{cursor:grabbing}
 </div>
 <button class="btn-delete" id="deleteBtn">删除照片</button>
 </div>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
