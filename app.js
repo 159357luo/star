@@ -428,7 +428,7 @@ canvas.addEventListener("click", function(e) {
     var dist = Math.sqrt(ddx * ddx + ddy * ddy);
     var hitR = Math.max(ps.baseSize * 0.5, 15);
     if (dist < hitR && dist < closestDist) {
-    if (dist < hitR && dist < closestDist) {
+      closest = ps;
       closestDist = dist;
     }
   }
