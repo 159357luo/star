@@ -541,7 +541,6 @@ async function loadSavedData() {
       if (data.count) {
         starNumSlider.value = data.count;
         starNumVal.textContent = data.count;
-        targetRotationSpeed = data.count / 100;
       }
       return true;
     }
