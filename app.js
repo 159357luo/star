@@ -1,4 +1,4 @@
-﻿// ==========  v15 - 强制横屏 + 高清渲染 + 星云背景 ==========
+﻿// ==========  v15.1 - 修复安卓横屏星星消失 + 删除照片功能 ==========
 var canvas = document.getElementById("c");
 var ctx = canvas.getContext("2d");
 var overlay = document.getElementById("overlay");
@@ -35,9 +35,18 @@ function detectOrientation() {
   isLandscape = window.innerWidth > window.innerHeight;
 }
 
+var resizeTimer = null;
 function resize() {
-  W = window.innerWidth;
-  H = window.innerHeight;
+  var newW = window.innerWidth;
+  var newH = window.innerHeight;
+  // Android横屏时可能出现无效尺寸，跳过
+  if (newW <= 0 || newH <= 0) return;
+  // 尺寸没变且不是首次初始化则跳过
+  if (newW === W && newH === H && W > 0) return;
+  // 更新dpr，部分设备旋转后像素比会变
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = newW;
+  H = newH;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   canvas.style.width = W + "px";
@@ -52,9 +61,15 @@ function resize() {
   updateHintForMobile();
 }
 resize();
-window.addEventListener("resize", resize);
+window.addEventListener("resize", function() {
+  // 防抖：横屏旋转时会连续触发多次resize
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resize, 150);
+});
 window.addEventListener("orientationchange", function() {
-  setTimeout(resize, 300);
+  // 方向变化时延迟更久，等浏览器布局稳定
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resize, 400);
 });
 
 function updateHintForMobile() {
@@ -588,6 +603,7 @@ starNumSlider.addEventListener("input", function() {
   starNumVal.textContent = num;
   buildPhotoStars(num);
   updateStarCount();
+  savePhotoData();
 });
 
 // ===== IndexedDB for persistent storage =====
@@ -838,8 +854,11 @@ function hidePhoto() {
 
 function syncEdit() {
   if (currentPhotoIdx >= 0 && currentPhotoIdx < photoStars.length) {
-    photoStars[currentPhotoIdx].photo.title = photoTitle.textContent;
-    photoStars[currentPhotoIdx].photo.desc = photoDesc.textContent;
+    var photo = photoStars[currentPhotoIdx].photo;
+    photo.title = photoTitle.textContent;
+    photo.desc = photoDesc.textContent;
+    // 持久化标题和描述的修改
+    savePhotoData();
   }
 }
 
@@ -877,13 +896,39 @@ nextBtn.addEventListener("click", function(e) {
   showPhoto(currentPhotoIdx);
 });
 
-// =====  =====
+// ===== 删除照片 —— 彻底清除照片数据，不只是移除星星 =====
 deleteBtn.addEventListener("click", function(e) {
   e.stopPropagation();
   e.preventDefault();
   if (currentPhotoIdx < 0 || currentPhotoIdx >= photoStars.length) return;
-  photoStars.splice(currentPhotoIdx, 1);
-  updateStarCount();
+
+  // 找到当前星星对应的照片在photos数组中的索引
+  var photoObj = photoStars[currentPhotoIdx].photo;
+  var photoIdx = photos.indexOf(photoObj);
+
+  if (photoIdx >= 0) {
+    // 重置照片为默认状态（保留槽位，避免索引错乱）
+    photos[photoIdx].title = "星星 " + (photoIdx + 1);
+    photos[photoIdx].desc = "";
+    photos[photoIdx].img = null;
+
+    // 清除已加载的图片
+    loadedImages[photoIdx] = null;
+
+    // 清除缓存
+    STAR_CACHE[photoIdx] = null;
+
+    // 从 IndexedDB 中删除图片数据
+    deleteImageFromDB(photoIdx);
+
+    // 保存更新后的元数据
+    savePhotoData();
+
+    // 重建星星以刷新显示
+    buildPhotoStars(photoStars.length);
+    updateStarCount();
+  }
+
   hidePhoto();
 });
 
@@ -1153,58 +1198,62 @@ function drawBackground() {
 }
 
 function animate() {
-  drawBackground();
+  try {
+    drawBackground();
 
-  rotX += (targetRotX - rotX) * 0.06;
-  rotY += (targetRotY - rotY) * 0.06;
+    rotX += (targetRotX - rotX) * 0.06;
+    rotY += (targetRotY - rotY) * 0.06;
 
-  // Safety: clamp targetRotationSpeed to slider range (0.0-1.0)
-  if (targetRotationSpeed > 1.0) targetRotationSpeed = parseInt(speedSlider.value) / 100;
-  rotationSpeed += (targetRotationSpeed - rotationSpeed) * 0.1;
-  // Pause on hover
-  var hoveredPhoto = mouseOverStar >= 0 && mouseOverStar < photoStars.length;
-  if (autoRotateOn && !dragging && !hoveredPhoto) {
-    targetRotY += 0.0015 * rotationSpeed * 10;
-  }
-
-  // Search fly-to: smoothly rotate to target star at ~45 degree
-  if (searchFlyTo && searchFlyTo.starIdx >= 0 && searchFlyTo.starIdx < photoStars.length) {
-    var ps = photoStars[searchFlyTo.starIdx];
-    var idealRotY = -Math.atan2(ps.x, ps.z);
-    // 45 degree: tilt X by -0.78 (PI/4) to see from above at angle
-    var idealRotX = -1.3;
-    var dy = idealRotY - targetRotY;
-    while (dy > Math.PI) dy -= Math.PI * 2;
-    while (dy < -Math.PI) dy += Math.PI * 2;
-    targetRotY += dy * 0.04;
-    var dx = idealRotX - targetRotX;
-    targetRotX += dx * 0.04;
-    targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
-    if (Math.abs(dy) < 0.003 && Math.abs(dx) < 0.003) {
-      targetRotY = idealRotY;
-      targetRotX = idealRotX;
-      // Mark as reached so we can add a ring
-      searchFlyTo.reached = true;
+    // Safety: clamp targetRotationSpeed to slider range (0.0-1.0)
+    if (targetRotationSpeed > 1.0) targetRotationSpeed = parseInt(speedSlider.value) / 100;
+    rotationSpeed += (targetRotationSpeed - rotationSpeed) * 0.1;
+    // Pause on hover
+    var hoveredPhoto = mouseOverStar >= 0 && mouseOverStar < photoStars.length;
+    if (autoRotateOn && !dragging && !hoveredPhoto) {
+      targetRotY += 0.0015 * rotationSpeed * 10;
     }
-  }
 
-  drawParticles();
-  drawDeepStars();
-  drawPhotoStars();
-  spawnShootingStar();
-  drawShootingStars();
+    // Search fly-to: smoothly rotate to target star at ~45 degree
+    if (searchFlyTo && searchFlyTo.starIdx >= 0 && searchFlyTo.starIdx < photoStars.length) {
+      var ps = photoStars[searchFlyTo.starIdx];
+      var idealRotY = -Math.atan2(ps.x, ps.z);
+      // 45 degree: tilt X by -0.78 (PI/4) to see from above at angle
+      var idealRotX = -1.3;
+      var dy = idealRotY - targetRotY;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      targetRotY += dy * 0.04;
+      var dx = idealRotX - targetRotX;
+      targetRotX += dx * 0.04;
+      targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
+      if (Math.abs(dy) < 0.003 && Math.abs(dx) < 0.003) {
+        targetRotY = idealRotY;
+        targetRotX = idealRotX;
+        // Mark as reached so we can add a ring
+        searchFlyTo.reached = true;
+      }
+    }
 
-  // Draw announcement text
-  if (announceTimer > 0) {
-    announceTimer--;
-    var alpha = Math.min(1, announceTimer / 30);
-    ctx.font = "bold 20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(167,139,250," + alpha + ")";
-    ctx.shadowColor = "rgba(167,139,250," + (alpha * 0.5) + ")";
-    ctx.shadowBlur = 15;
-    ctx.fillText(announceText, W / 2, H * 0.12);
-    ctx.shadowBlur = 0;
+    drawParticles();
+    drawDeepStars();
+    drawPhotoStars();
+    spawnShootingStar();
+    drawShootingStars();
+
+    // Draw announcement text
+    if (announceTimer > 0) {
+      announceTimer--;
+      var alpha = Math.min(1, announceTimer / 30);
+      ctx.font = "bold 20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(167,139,250," + alpha + ")";
+      ctx.shadowColor = "rgba(167,139,250," + (alpha * 0.5) + ")";
+      ctx.shadowBlur = 15;
+      ctx.fillText(announceText, W / 2, H * 0.12);
+      ctx.shadowBlur = 0;
+    }
+  } catch (e) {
+    // 横屏/旋转时canvas可能短暂不可用，静默吞掉错误，保持动画循环运行
   }
 
   requestAnimationFrame(animate);
