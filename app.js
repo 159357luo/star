@@ -196,9 +196,6 @@ async function loadSavedImages() {
   await Promise.all(promises);
 }
 
-// Load saved images from DB after init
-loadSavedImages();
-
 function updateStarCount() {
   if (starCountEl) starCountEl.textContent = photoStars.length + " \u9897\u661F\u661F";
 }
@@ -462,53 +459,6 @@ starNumSlider.addEventListener("input", function() {
   updateStarCount();
 });
 
-// =====  =====
-searchInput = document.getElementById("search-input");
-if (searchInput) {
-  searchInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") {
-      var val = this.value.trim().toUpperCase();
-      if (!val) {
-        searchFlyTo = null;
-        return;
-      }
-      searchFlyTo = null;
-      for (var i = 0; i < photoStars.length; i++) {
-        var sid = photoStars[i].starId || "";
-        // Match against full starId OR just the number part
-        if (sid.toUpperCase().indexOf(val) !== -1 || sid.replace(/[⭐-]/g, "").indexOf(val) !== -1) {
-          searchFlyTo = { starIdx: i, starId: sid };
-          break;
-        }
-      }
-      if (searchFlyTo) {
-        // Trigger shooting star burst
-        for (var s = 0; s < 5; s++) {
-          shootingStars.push({
-            x: Math.random() * W,
-            y: Math.random() * H * 0.5,
-            angle: Math.PI / 4 + (Math.random() - 0.5) * 0.4,
-            length: 120 + Math.random() * 100,
-            speed: 6 + Math.random() * 5,
-            life: 0,
-            maxLife: 40 + Math.random() * 30,
-          });
-        }
-        announceText = "\u627E\u5230\u5B83\u4E86！\u7F16\u53F7 " + searchFlyTo.starId;
-        announceTimer = 200;
-        autoRotateOn = false;
-        var btn = document.getElementById("btn-auto-rotate");
-        if (btn) {
-          btn.textContent = "\u65CB\u8F6C：\u5173";
-          btn.classList.remove("active");
-        }
-      } else {
-        announceText = "\u672A\u627E\u5230\u7F16\u53F7\u542B " + val + " \u7684\u661F\u661F";
-        announceTimer = 150;
-      }
-      this.blur();
-    }
-
 // ===== IndexedDB for persistent storage =====
 var DB_NAME = "starryAlbum";
 var DB_VERSION = 1;
@@ -649,14 +599,63 @@ function dbClose() {
   if (db) { db.close(); db = null; }
 }
 
-// Initialize DB and load data
+// Initialize DB, create stars, load saved data and images
 openDB().then(function() {
-  loadSavedData();
+  initPhotos();
+  return loadSavedData().then(function() {
+    return loadSavedImages();
+  });
 }).catch(function(e) {
   console.warn("IndexedDB not available:", e);
+  initPhotos();
 });
 
-
+// =====  =====
+searchInput = document.getElementById("search-input");
+if (searchInput) {
+  searchInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      var val = this.value.trim().toUpperCase();
+      if (!val) {
+        searchFlyTo = null;
+        return;
+      }
+      searchFlyTo = null;
+      for (var i = 0; i < photoStars.length; i++) {
+        var sid = photoStars[i].starId || "";
+        // Match against full starId OR just the number part
+        if (sid.toUpperCase().indexOf(val) !== -1 || sid.replace(/[⭐-]/g, "").indexOf(val) !== -1) {
+          searchFlyTo = { starIdx: i, starId: sid };
+          break;
+        }
+      }
+      if (searchFlyTo) {
+        // Trigger shooting star burst
+        for (var s = 0; s < 5; s++) {
+          shootingStars.push({
+            x: Math.random() * W,
+            y: Math.random() * H * 0.5,
+            angle: Math.PI / 4 + (Math.random() - 0.5) * 0.4,
+            length: 120 + Math.random() * 100,
+            speed: 6 + Math.random() * 5,
+            life: 0,
+            maxLife: 40 + Math.random() * 30,
+          });
+        }
+        announceText = "\u627E\u5230\u5B83\u4E86！\u7F16\u53F7 " + searchFlyTo.starId;
+        announceTimer = 200;
+        autoRotateOn = false;
+        var btn = document.getElementById("btn-auto-rotate");
+        if (btn) {
+          btn.textContent = "\u65CB\u8F6C：\u5173";
+          btn.classList.remove("active");
+        }
+      } else {
+        announceText = "\u672A\u627E\u5230\u7F16\u53F7\u542B " + val + " \u7684\u661F\u661F";
+        announceTimer = 150;
+      }
+      this.blur();
+    }
   });
 }
 
