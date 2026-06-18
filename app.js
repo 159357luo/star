@@ -1,4 +1,4 @@
-﻿// ==========  v12 -  ==========
+﻿// ==========  v14 - 移动端横屏适配 ==========
 var canvas = document.getElementById("c");
 var ctx = canvas.getContext("2d");
 var overlay = document.getElementById("overlay");
@@ -27,12 +27,37 @@ var announceText = "";
 var announceTimer = 0;
 
 var W, H;
+var isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+var isLandscape = false;
+
+function detectOrientation() {
+  isLandscape = window.innerWidth > window.innerHeight;
+}
+
 function resize() {
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
+  detectOrientation();
+  // 移动端横屏时显示提示并自适应
+  updateHintForMobile();
 }
 resize();
 window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function() {
+  setTimeout(resize, 300); // 等待旋转完成
+});
+
+function updateHintForMobile() {
+  var hintEl = document.getElementById("hint");
+  if (!hintEl) return;
+  if (isMobile && isLandscape) {
+    hintEl.textContent = "滑动旋转 | 点击星星 | 双击查看照片 | 双指缩放";
+  } else if (isMobile) {
+    hintEl.textContent = "滑动旋转 | 点击星星 | 双击查看照片 | 双指缩放";
+  } else {
+    hintEl.textContent = "拖动旋转 | 点击星星 | 双击强化照片 | 点击标题直接修改 | 右上角按钮";
+  }
+}
 
 // =====  =====
 var TEMPLATE_COLORS = [
@@ -374,10 +399,11 @@ canvas.addEventListener("touchstart", function(e) {
   dragging = true;
   lastMX = e.touches[0].clientX;
   lastMY = e.touches[0].clientY;
-}, {passive:true});
+}, {passive:false});
 
 canvas.addEventListener("touchmove", function(e) {
   if (!dragging) return;
+  e.preventDefault(); // 防止浏览器默认手势
   var dx = e.touches[0].clientX - lastMX;
   var dy = e.touches[0].clientY - lastMY;
   targetRotY += dx * 0.004;
@@ -385,7 +411,7 @@ canvas.addEventListener("touchmove", function(e) {
   targetRotX = Math.max(-1.5, Math.min(1.5, targetRotX));
   lastMX = e.touches[0].clientX;
   lastMY = e.touches[0].clientY;
-}, {passive:true});
+}, {passive:false});
 
 canvas.addEventListener("touchend", function() { dragging = false; });
 
@@ -395,6 +421,80 @@ canvas.addEventListener("wheel", function(e) {
   zoomLevel = Math.max(0.3, Math.min(5.0, zoomLevel + delta));
   if (zoomIndicator) zoomIndicator.textContent = "\u7F29\u653E: " + zoomLevel.toFixed(1) + "x";
 }, {passive:false});
+
+// ===== \u634F\u5408\u7F29\u653E\uFF08\u79FB\u52A8\u7AEF\uFF09=====
+var pinchDist = 0;
+var pinchCenterX = 0, pinchCenterY = 0;
+
+canvas.addEventListener("touchstart", function(e) {
+  if (e.touches.length === 2) {
+    var dx = e.touches[0].clientX - e.touches[1].clientX;
+    var dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchDist = Math.sqrt(dx * dx + dy * dy);
+    pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    dragging = false;
+  }
+}, {passive:false});
+
+canvas.addEventListener("touchmove", function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    var dx = e.touches[0].clientX - e.touches[1].clientX;
+    var dy = e.touches[0].clientY - e.touches[1].clientY;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (pinchDist > 0) {
+      var delta = (dist - pinchDist) * 0.008;
+      zoomLevel = Math.max(0.3, Math.min(5.0, zoomLevel + delta));
+      if (zoomIndicator) zoomIndicator.textContent = "\u7F29\u653E: " + zoomLevel.toFixed(1) + "x";
+    }
+    pinchDist = dist;
+  }
+}, {passive:false});
+
+canvas.addEventListener("touchend", function(e) {
+  if (e.touches.length < 2) pinchDist = 0;
+});
+
+// ===== \u53CC\u51FB\u68C0\u6D4B\uFF08\u79FB\u52A8\u7AEF\u6253\u5F00\u7167\u7247\uFF09=====
+var lastTapTime = 0;
+var lastTapX = 0, lastTapY = 0;
+var DOUBLE_TAP_THRESHOLD = 300; // ms
+var DOUBLE_TAP_DIST = 30; // px
+
+canvas.addEventListener("touchend", function(e) {
+  var now = Date.now();
+  var tx = e.changedTouches[0].clientX;
+  var ty = e.changedTouches[0].clientY;
+  if (now - lastTapTime < DOUBLE_TAP_THRESHOLD &&
+      Math.abs(tx - lastTapX) < DOUBLE_TAP_DIST &&
+      Math.abs(ty - lastTapY) < DOUBLE_TAP_DIST) {
+    // Double tap detected \u2014 find closest star
+    var closest = null, closestDist = Infinity;
+    for (var j = 0; j < photoStars.length; j++) {
+      var ps = photoStars[j];
+      var rp = rotatePoint(ps.x, ps.y, ps.z, rotX, rotY);
+      var pr = project(rp[0], rp[1], rp[2]);
+      if (pr[2] <= 0) continue;
+      var ddx = tx - pr[0], ddy = ty - pr[1];
+      var dist = Math.sqrt(ddx * ddx + ddy * ddy);
+      var hitR = Math.max(ps.baseSize * 0.6, 25);
+      if (dist < hitR && dist < closestDist) {
+        closest = ps;
+        closestDist = dist;
+      }
+    }
+    if (closest) {
+      var idx = photoStars.indexOf(closest);
+      showPhoto(idx);
+    }
+    lastTapTime = 0;
+  } else {
+    lastTapTime = now;
+    lastTapX = tx;
+    lastTapY = ty;
+  }
+});
 
 canvas.addEventListener("mousemove", function(e) {
   if (dragging) return;
@@ -407,7 +507,7 @@ canvas.addEventListener("mousemove", function(e) {
     if (pr[2] <= 0) continue;
     var ddx = mx - pr[0], ddy = my - pr[1];
     var dist = Math.sqrt(ddx * ddx + ddy * ddy);
-    var hitR = Math.max(ps.baseSize * 0.5, 15);
+    var hitR = Math.max(ps.baseSize * 0.5, 18);
     if (dist < hitR) { found = j; break; }
   }
   mouseOverStar = found;
@@ -415,9 +515,11 @@ canvas.addEventListener("mousemove", function(e) {
 });
 
 canvas.addEventListener("click", function(e) {
-  if (Math.abs(e.clientX - lastMX) > 8 || Math.abs(e.clientY - lastMY) > 8) return;
+  if (Math.abs(e.clientX - lastMX) > 12 || Math.abs(e.clientY - lastMY) > 12) return;
   var mx = e.clientX, my = e.clientY;
   var closest = null, closestDist = Infinity;
+  var isTouch = (e.pointerType === "touch") || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents);
+  var minHitR = isTouch ? 28 : 16;
   for (var j = 0; j < photoStars.length; j++) {
     var ps = photoStars[j];
     var rp = rotatePoint(ps.x, ps.y, ps.z, rotX, rotY);
@@ -425,7 +527,7 @@ canvas.addEventListener("click", function(e) {
     if (pr[2] <= 0) continue;
     var ddx = mx - pr[0], ddy = my - pr[1];
     var dist = Math.sqrt(ddx * ddx + ddy * ddy);
-    var hitR = Math.max(ps.baseSize * 0.5, 15);
+    var hitR = Math.max(ps.baseSize * 0.5, minHitR);
     if (dist < hitR && dist < closestDist) {
       closest = ps;
       closestDist = dist;
