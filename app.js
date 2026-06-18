@@ -1,4 +1,4 @@
-﻿// ==========  v16 - 横屏防抖 + 删除修复 ==========
+﻿// ==========  v17 - 修复 resize 初始化时序 ==========
 var canvas = document.getElementById("c");
 var ctx = canvas.getContext("2d");
 var overlay = document.getElementById("overlay");
@@ -51,7 +51,6 @@ function resize() {
   detectOrientation();
   updateHintForMobile();
 }
-resize();
 var resizeTimer = null;
 window.addEventListener("resize", function() {
   if (resizeTimer) clearTimeout(resizeTimer);
@@ -379,6 +378,9 @@ for (var i = 0; i < 60; i++) {
     color: pColor,
   });
 }
+
+// 初始化画布尺寸（在所有数据初始化完成后调用）
+resize();
 
 // ===== 3D =====
 var rotX = 0, rotY = 0;
