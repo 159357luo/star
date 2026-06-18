@@ -1,4 +1,4 @@
-// ==========  v17 - 修复 resize 初始化时序 ==========
+﻿// ==========  v15 - 强制横屏 + 高清渲染 + 星云背景 ==========
 var canvas = document.getElementById("c");
 var ctx = canvas.getContext("2d");
 var overlay = document.getElementById("overlay");
@@ -51,14 +51,10 @@ function resize() {
   detectOrientation();
   updateHintForMobile();
 }
-var resizeTimer = null;
-window.addEventListener("resize", function() {
-  if (resizeTimer) clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(resize, 150);
-});
+resize();
+window.addEventListener("resize", resize);
 window.addEventListener("orientationchange", function() {
-  if (resizeTimer) clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(resize, 400);
+  setTimeout(resize, 300);
 });
 
 function updateHintForMobile() {
@@ -379,9 +375,6 @@ for (var i = 0; i < 60; i++) {
   });
 }
 
-// 初始化画布尺寸（在所有数据初始化完成后调用）
-resize();
-
 // ===== 3D =====
 var rotX = 0, rotY = 0;
 var targetRotX = 0, targetRotY = 0;
@@ -595,7 +588,6 @@ starNumSlider.addEventListener("input", function() {
   starNumVal.textContent = num;
   buildPhotoStars(num);
   updateStarCount();
-  savePhotoData();
 });
 
 // ===== IndexedDB for persistent storage =====
@@ -745,19 +737,17 @@ function dbClose() {
   if (db) { db.close(); db = null; }
 }
 
-// Initialize default photos immediately so stars display right away
-initPhotos();
-
-// Then try to load saved data from IndexedDB (will replace defaults if available)
+// Initialize DB, load saved data first, create defaults only if nothing saved
 openDB().then(function() {
   return loadSavedData().then(function(hasSavedData) {
-    // If saved data loaded, it already rebuilt photoStars (no need to init again)
+    if (!hasSavedData) initPhotos();
     // Safety: ensure rotation speed matches slider after data restore
     targetRotationSpeed = parseInt(speedSlider.value) / 100;
     return loadSavedImages();
   });
 }).catch(function(e) {
-  console.warn("IndexedDB not available, using defaults:", e);
+  console.warn("IndexedDB not available:", e);
+  initPhotos();
 });
 
 // =====  =====
@@ -850,7 +840,6 @@ function syncEdit() {
   if (currentPhotoIdx >= 0 && currentPhotoIdx < photoStars.length) {
     photoStars[currentPhotoIdx].photo.title = photoTitle.textContent;
     photoStars[currentPhotoIdx].photo.desc = photoDesc.textContent;
-    savePhotoData();
   }
 }
 
@@ -888,28 +877,13 @@ nextBtn.addEventListener("click", function(e) {
   showPhoto(currentPhotoIdx);
 });
 
-// ===== 删除照片 =====
+// =====  =====
 deleteBtn.addEventListener("click", function(e) {
   e.stopPropagation();
   e.preventDefault();
   if (currentPhotoIdx < 0 || currentPhotoIdx >= photoStars.length) return;
-  // 找到照片在photos数组中的实际索引
-  var photoObj = photoStars[currentPhotoIdx].photo;
-  var photoIdx = photos.indexOf(photoObj);
-  if (photoIdx >= 0) {
-    // 重置为默认照片
-    photos[photoIdx].title = "星星 " + (photoIdx + 1);
-    photos[photoIdx].desc = "";
-    photos[photoIdx].img = null;
-    loadedImages[photoIdx] = null;
-    STAR_CACHE[photoIdx] = null;
-    // 从IndexedDB删除图片
-    deleteImageFromDB(photoIdx);
-    savePhotoData();
-    // 重建星星显示
-    buildPhotoStars(photoStars.length);
-    updateStarCount();
-  }
+  photoStars.splice(currentPhotoIdx, 1);
+  updateStarCount();
   hidePhoto();
 });
 
