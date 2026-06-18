@@ -3,7 +3,7 @@
 <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>�ǿ����</title>
+<title>星空相册</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000}
@@ -60,27 +60,27 @@ canvas:active{cursor:grabbing}
 </head>
 <body>
 <canvas id="c"></canvas>
-<div class="hint" id="hint">��ק��ת | �������� | ������ǿ���Ƭ | ������ֱ���޸����� | ���Ͻǿ���</div>
-<div id="zoom-indicator">����: 1.0x</div>
+<div class="hint" id="hint">拖动旋转 | 点击星星 | 双击强化照片 | 点击标题直接修改 | 右上角按钮</div>
+<div id="zoom-indicator">缩放: 1.0x</div>
 <div id="star-count"></div>
 <div id="controls">
 <div class="ctrl-section">
-<button class="ctrl-toggle active" id="btn-auto-rotate">��ת����</button>
-<button class="ctrl-reset" id="btn-reset">����</button>
+<button class="ctrl-toggle active" id="btn-auto-rotate">自动旋转</button>
+<button class="ctrl-reset" id="btn-reset">重置</button>
 </div>
 <div class="ctrl-section">
-<span class="ctrl-label">�ٶ�</span>
+<span class="ctrl-label">速度</span>
 <input type="range" id="speed-slider" class="ctrl-slider" min="0" max="100" value="20">
 <span id="speed-val" class="ctrl-label">0.2x</span>
 </div>
 <div class="ctrl-section">
-<span class="ctrl-label">������</span>
+<span class="ctrl-label">星星数</span>
 <input type="range" id="star-num-slider" class="ctrl-slider" min="32" max="500" value="200">
 <span id="star-num-val" class="ctrl-label">200</span>
 </div>
 </div>
-<div id="upload-area"><label id="upload-btn" for="upload-input">�����Ƭ</label><input type="file" id="upload-input" accept="image/*" multiple></div>
-<div class="search-box"><input type="text" class="search-input" id="search-input" placeholder="�������..."></div>
+<div id="upload-area"><label id="upload-btn" for="upload-input">上传照片</label><input type="file" id="upload-input" accept="image/*" multiple></div>
+<div class="search-box"><input type="text" class="search-input" id="search-input" placeholder="搜索照片..."></div>
 <div class="overlay" id="overlay">
 <button class="overlay-close" id="closeBtn">&times;</button>
 <div class="modal-body">
@@ -88,16 +88,16 @@ canvas:active{cursor:grabbing}
 <div class="modal-right">
 <h2 id="photoTitle" contenteditable="true"></h2>
 <div class="desc-area" id="photoDesc" contenteditable="true"></div>
-<label class="replace-btn" id="replaceBtn" for="replace-input">������Ƭ</label>
+<label class="replace-btn" id="replaceBtn" for="replace-input">更换照片</label>
 <input type="file" id="replace-input" accept="image/*" style="display:none">
-<div class="edit-hint">������ֿ�ֱ�ӱ༭</div>
+<div class="edit-hint">点击标题和描述直接编辑</div>
 </div>
 </div>
 <div class="modal-nav">
-<button id="prevBtn">&#8249; ��һ��</button>
-<button id="nextBtn">��һ�� &#8250;</button>
+<button id="prevBtn">&#8249; 上一张</button>
+<button id="nextBtn">下一张 &#8250;</button>
 </div>
-<button class="btn-delete" id="deleteBtn">ɾ������</button>
+<button class="btn-delete" id="deleteBtn">删除照片</button>
 </div>
 <script src="app.js"></script>
 </body>
