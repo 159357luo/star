@@ -207,10 +207,10 @@ function handleImageFile(file, callback) {
     var base64Data = ev.target.result;
     var img = new Image();
     img.onload = function() {
-      callback(null, img);
+      callback(null, img, base64Data);
     };
     img.onerror = function() {
-      callback("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25", null);
+      callback("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25", null, null);
     };
     img.src = base64Data;
   };
@@ -222,7 +222,7 @@ uploadInput.addEventListener("change", function(e) {
   var files = e.target.files;
   for (var i = 0; i < files.length; i++) {
     (function(file) {
-      handleImageFile(file, function(err, img) {
+      handleImageFile(file, function(err, img, base64Data) {
         var idx = photos.length;
         photos.push({
           title: "\u6211\u7684\u7167\u7247 " + (idx + 1),
@@ -233,6 +233,7 @@ uploadInput.addEventListener("change", function(e) {
           loadedImages[idx] = null;
         } else {
           loadedImages[idx] = img;
+          saveImageToDB(idx, base64Data);
         }
         buildPhotoStars(photos.length);
         updateStarCount();
@@ -255,13 +256,14 @@ replaceInput.addEventListener("change", function(e) {
   var file = e.target.files[0];
   if (!file || currentPhotoIdx < 0) return;
   var idx = currentPhotoIdx;
-  handleImageFile(file, function(err, img) {
+  handleImageFile(file, function(err, img, base64Data) {
     if (err) {
       console.warn("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25:", err);
       loadedImages[idx] = null;
     } else {
       loadedImages[idx] = img;
       photos[idx].img = img;
+      saveImageToDB(idx, base64Data);
     }
     STAR_CACHE[idx] = null;
     getStarCache(idx);
@@ -524,21 +526,29 @@ function dbClear() {
 async function loadSavedData() {
   try {
     var data = await dbGet("album_data");
-    if (data && data.photos) {
-      // Restore photo titles and descriptions
-      for (var i = 0; i < data.photos.length && i < photos.length; i++) {
-        photos[i].title = data.photos[i].title || photos[i].title;
-        photos[i].desc = data.photos[i].desc || photos[i].desc;
+    if (data && data.photos && data.photos.length > 0) {
+      // Rebuild photos array from saved data
+      photos = [];
+      loadedImages = [];
+      photoStars = [];
+      STAR_CACHE = {};
+      for (var i = 0; i < data.photos.length; i++) {
+        photos.push({ title: data.photos[i].title || ("星星 " + (i + 1)), desc: data.photos[i].desc || "", img: null });
+        loadedImages[i] = null;
       }
+      buildPhotoStars(data.count || photos.length);
+      updateStarCount();
+      if (data.count) {
+        starNumSlider.value = data.count;
+        starNumVal.textContent = data.count;
+        targetRotationSpeed = data.count / 100;
+      }
+      return true;
     }
-    if (data && data.count) {
-      // Restore star count
-      starNumSlider.value = data.count;
-      starNumVal.textContent = data.count;
-      targetRotationSpeed = data.count / 100;
-    }
+    return false;
   } catch(e) {
     console.warn("Failed to load saved data:", e);
+    return false;
   }
 }
 
@@ -599,10 +609,10 @@ function dbClose() {
   if (db) { db.close(); db = null; }
 }
 
-// Initialize DB, create stars, load saved data and images
+// Initialize DB, load saved data first, create defaults only if nothing saved
 openDB().then(function() {
-  initPhotos();
-  return loadSavedData().then(function() {
+  return loadSavedData().then(function(hasSavedData) {
+    if (!hasSavedData) initPhotos();
     return loadSavedImages();
   });
 }).catch(function(e) {
